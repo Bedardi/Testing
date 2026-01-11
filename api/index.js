@@ -3,7 +3,7 @@ const axios = require("axios");
 module.exports = async (req, res) => {
     const { product } = req.query;
 
-    // 🔒 1. SECURE: Get Config from Vercel
+    // 🔒 1. SECURE CONFIG
     let DB_URL = "";
     try {
         if (!process.env.FIREBASE_CONFIG_JSON) throw new Error("Missing Config");
@@ -13,251 +13,246 @@ module.exports = async (req, res) => {
         return res.status(500).send("Server Config Error");
     }
 
-    // 2. Default Meta Data
+    // 2. FETCH DATA (Server Side)
     let meta = {
         title: "MistaHub Store",
-        desc: "Download premium tools for developers.",
+        desc: "Download premium developer tools and apps.",
         image: "https://i.ibb.co/5WqqrrqB/b491fe4e44b7.png",
         url: "https://mistahub.vercel.app/"
     };
+    
+    let appData = null; // Data hold karne ke liye
+    let apkUrl = "#";   // Default APK URL
 
-    // 3. Server Side Data Fetching (For Meta Tags)
     if (product) {
         try {
-            const response = await axios.get(`${DB_URL}/apps/${product}.json`);
-            const data = response.data;
-            if (data) {
-                meta.title = data.metaTitle || `${data.name} - Download`;
-                meta.desc = data.metaDesc || data.shortDesc;
-                meta.image = data.icon || meta.image;
+            // Parallel Fetch: App Data + Settings (APK Link)
+            const [appRes, setRes] = await Promise.all([
+                axios.get(`${DB_URL}/apps/${product}.json`),
+                axios.get(`${DB_URL}/settings.json`)
+            ]);
+            
+            appData = appRes.data;
+            const settings = setRes.data;
+            if(settings && settings.apkUrl) apkUrl = settings.apkUrl;
+
+            if (appData) {
+                meta.title = appData.metaTitle || `${appData.name} - Download`;
+                meta.desc = appData.metaDesc || appData.shortDesc;
+                meta.image = appData.icon || meta.image;
                 meta.url = `https://mistahub.vercel.app/?product=${product}`;
             }
         } catch (error) { console.error("Fetch Error"); }
     }
 
-    // 🔥 LANDING PAGE LOGIC 🔥
-    // Agar product hai, to 'landing-mode' class body par lag jayegi
-    const bodyClass = product ? "landing-mode" : "";
+    // 🔥 SMART BUTTON LOGIC (Server Side) 🔥
+    // Agar Demo link hai tabhi button dikhao
+    const demoButtonHTML = (appData && appData.demoUrl) 
+        ? `<a href="${appData.demoUrl}" target="_blank" class="btn btn-demo"><i class="fas fa-eye"></i> Live Demo</a>` 
+        : ``;
 
+    // 3. HTML GENERATION
     const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#4f46e5">
     
     <title>${meta.title}</title>
     <meta name="description" content="${meta.desc}">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="${meta.url}">
     <meta property="og:title" content="${meta.title}">
     <meta property="og:description" content="${meta.desc}">
     <meta property="og:image" content="${meta.image}">
     <meta property="og:image:width" content="600">
     <meta property="og:image:height" content="600">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="${meta.title}">
-    <meta name="twitter:description" content="${meta.desc}">
     <meta name="twitter:image" content="${meta.image}">
 
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        :root { --primary: #6366f1; --bg-body: #f8fafc; --bg-card: #ffffff; --text-main: #0f172a; --text-sub: #64748b; --border: #e2e8f0; --shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-        body { margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg-body); color: var(--text-main); padding-bottom: 90px; }
+        :root { 
+            --primary: #4f46e5; /* Deep Indigo */
+            --primary-dark: #3730a3;
+            --accent: #10b981;  /* Success Green */
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); padding-bottom: 90px; }
         a { text-decoration: none; color: inherit; }
-        
-        /* HEADER (Logo & Search) */
-        header { position: sticky; top: 0; z-index: 100; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 20px; transition: 0.3s; }
-        .nav-container { max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
-        .logo { font-weight: 800; font-size: 20px; background: linear-gradient(135deg, #6366f1, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; cursor: pointer; }
-        .search-wrapper { position: relative; width: 60%; max-width: 400px; }
-        .search-wrapper input { width: 100%; padding: 10px 15px 10px 40px; border-radius: 20px; border: 1px solid var(--border); background: #f1f5f9; outline: none; }
-        .search-wrapper i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-sub); }
 
-        /* 🔥 LANDING MODE MAGIC: Hide Header when in Landing Mode 🔥 */
-        body.landing-mode header { display: none !important; }
-        body.landing-mode #view-product { padding-top: 20px; } 
+        /* --- LANDING PAGE HEADER (Dream11 Style) --- */
+        .hero-section {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px 20px 40px;
+            text-align: center;
+            border-radius: 0 0 30px 30px;
+            box-shadow: 0 10px 30px -10px rgba(79, 70, 229, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Background Pattern decoration */
+        .hero-section::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 10%, transparent 10%);
+            background-size: 20px 20px; opacity: 0.3; pointer-events: none;
+        }
 
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
-        .card { background: var(--bg-card); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: var(--shadow); transition: 0.3s; cursor: pointer; border: 1px solid transparent; }
-        .card:hover { transform: translateY(-5px); border-color: var(--primary); }
-        .card-icon { width: 72px; height: 72px; border-radius: 18px; margin-bottom: 12px; object-fit: cover; }
-        .card-title { font-weight: 700; font-size: 15px; margin-bottom: 5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        
-        #view-product { display: none; background: var(--bg-body); min-height: 100vh; }
-        .p-header { background: var(--bg-card); padding: 30px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 20px; align-items: center; border-radius: 0 0 30px 30px; box-shadow: var(--shadow); }
-        .p-icon { width: 90px; height: 90px; border-radius: 22px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        .p-meta h1 { margin: 0 0 5px; font-size: 22px; font-weight: 800; line-height: 1.2; }
-        
-        .scroller { display: flex; gap: 12px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
-        .screen { height: 280px; border-radius: 12px; border: 1px solid var(--border); }
-        .desc-box { background: var(--bg-card); padding: 20px; border-radius: 16px; border: 1px solid var(--border); line-height: 1.7; margin-top: 15px; color: #334155; }
-        .desc-box img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+        .app-icon-lg {
+            width: 100px; height: 100px; border-radius: 22px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            border: 4px solid rgba(255,255,255,0.2);
+            margin-bottom: 15px; background: #fff; object-fit: cover;
+            position: relative; z-index: 2;
+        }
 
-        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 15px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: center; width: 100%; max-width: 800px; margin: 0 auto; }
-        @media (min-width: 800px) { .bottom-bar { left: 50%; transform: translateX(-50%); border-radius: 20px 20px 0 0; border: 1px solid var(--border); border-bottom: none; } }
-        .btn { flex: 1; padding: 14px; border-radius: 14px; border: none; font-weight: 700; cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-demo { background: #f1f5f9; color: var(--text-main); }
-        .btn-install { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
+        .app-title { font-size: 26px; font-weight: 800; margin: 0 0 5px; line-height: 1.2; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .app-badges { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+        .badge { background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; backdrop-filter: blur(4px); }
+        .badge i { color: #86efac; }
+
+        /* --- CONTENT AREA --- */
+        .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+
+        .section-title { font-size: 18px; font-weight: 700; margin: 25px 0 15px; display: flex; align-items: center; gap: 8px; color: var(--text); }
+        .section-title i { color: var(--primary); }
+
+        /* Screenshots Carousel */
+        .scroller-wrapper { margin: 0 -20px; padding: 0 20px; /* Bleed effect */ }
+        .scroller { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scrollbar-width: none; -ms-overflow-style: none; }
+        .scroller::-webkit-scrollbar { display: none; }
+        .screen { height: 320px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); background: #fff; }
+
+        /* Blog Style Description */
+        .desc-box { 
+            background: #fff; padding: 20px; border-radius: 20px; 
+            line-height: 1.8; color: #334155; font-size: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .desc-box b { color: var(--text); font-weight: 700; }
+        .desc-box a { color: var(--primary); text-decoration: underline; font-weight: 600; }
+        .desc-box img { max-width: 100%; border-radius: 12px; margin: 15px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .desc-box h2, .desc-box h3 { margin-top: 20px; margin-bottom: 10px; color: var(--text); font-weight: 700; line-height: 1.3; }
+
+        /* --- STICKY FOOTER (High Conversion) --- */
+        .bottom-bar { 
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(15px);
+            padding: 15px 20px; border-top: 1px solid #e2e8f0;
+            display: flex; gap: 12px; box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
+            max-width: 800px; margin: 0 auto;
+        }
+        @media (min-width: 800px) { .bottom-bar { border-radius: 20px 20px 0 0; border: 1px solid #e2e8f0; border-bottom: none; left: 50%; transform: translateX(-50%); } }
+
+        .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn:active { transform: scale(0.96); }
         
-        .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 12px; }
-        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .btn-demo { background: #eff6ff; color: var(--primary); border: 1px solid #bfdbfe; }
+        .btn-install { 
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); 
+            color: white; 
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4); 
+        }
+        
+        /* --- FALLBACK / HOME STYLES --- */
+        /* Agar product nahi hai (Home Page) to simple layout */
+        .home-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .home-card { background: white; padding: 15px; border-radius: 16px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .home-card img { width: 60px; height: 60px; border-radius: 15px; }
+        .search-header { padding: 20px; background: white; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: space-between; }
+        
+        /* Hide Home elements if in Product Mode */
+        body.landing-mode .home-view { display: none !important; }
     </style>
 </head>
-<body class="${bodyClass}">
+<body class="${product ? 'landing-mode' : ''}">
 
-    <header>
-        <div class="nav-container">
-            <div class="logo" onclick="goHome()">MistaHub</div>
-            <div class="search-wrapper">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="Search apps..." onkeyup="filterApps()">
-            </div>
-        </div>
-    </header>
-
-    <div id="view-home">
-        <div class="container">
-            <div id="product-grid" class="grid">
-                 <div class="card" style="height:180px;"><div class="skeleton" style="width:60px;height:60px;margin-bottom:10px;"></div><div class="skeleton" style="width:80%;height:15px;"></div></div>
-            </div>
-            <div id="no-results" style="text-align:center; padding:50px; display:none; color:#64748b;">No apps found.</div>
+    ${product ? `
+    <div class="hero-section">
+        <a href="/" style="position:absolute; top:20px; left:20px; color:rgba(255,255,255,0.8);"><i class="fas fa-arrow-left"></i> Back</a>
+        
+        <img src="${meta.image}" class="app-icon-lg">
+        <h1 class="app-title">${appData.name}</h1>
+        <div style="font-size:14px; opacity:0.9; margin-bottom:10px;">By MistaHub • Free Tools</div>
+        
+        <div class="app-badges">
+            <div class="badge"><i class="fas fa-check-circle"></i> Verified</div>
+            <div class="badge"><i class="fas fa-shield-alt"></i> 100% Safe</div>
+            <div class="badge"><i class="fas fa-star"></i> ${appData.rating || '4.5'} Rating</div>
         </div>
     </div>
 
-    <div id="view-product">
-        <div class="p-header">
-            <img id="p-icon" class="p-icon" src="">
-            <div>
-                <h1 id="p-title">Loading...</h1>
-                <span style="color:var(--primary); font-weight:600;"><i class="fas fa-check-circle"></i> Verified</span>
+    <div class="container">
+        <div class="section-title"><i class="fas fa-mobile-alt"></i> App Preview</div>
+        <div class="scroller-wrapper">
+            <div class="scroller">
+                ${(appData.screenshots || []).map(src => `<img src="${src}" class="screen" loading="lazy">`).join('')}
+                ${(!appData.screenshots) ? '<div style="padding:10px; color:#aaa; font-size:13px">No preview images available</div>' : ''}
             </div>
         </div>
-        <div class="container">
-            <h3 style="margin:0 0 10px;">Preview</h3>
-            <div class="scroller" id="p-screens"></div>
-            <h3 style="margin:20px 0 10px;">About this app</h3>
-            <div class="desc-box" id="p-desc"></div>
-            
-            <div style="text-align:center; margin-top:30px; margin-bottom:30px;">
-                <a href="/" style="color:var(--text-sub); font-size:14px; text-decoration:underline;">View All Apps on MistaHub</a>
-            </div>
+
+        <div class="section-title"><i class="fas fa-info-circle"></i> About this App</div>
+        <div class="desc-box">
+            ${(appData.fullDesc || "").replace(/\n/g, "<br>").replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<img src="$1">')}
         </div>
         
-        <div class="bottom-bar">
-            <button class="btn btn-demo" id="btn-demo"><i class="fas fa-globe"></i> Demo</button>
-            <button class="btn btn-install" id="btn-install"><i class="fas fa-download"></i> Install Now</button>
+        <div style="height: 30px;"></div>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <a href="/" style="color: var(--text-light); font-size: 13px; text-decoration: underline;">Discover more apps on MistaHub</a>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        ${demoButtonHTML}
+        <a href="${apkUrl}" class="btn btn-install">
+            <i class="fas fa-download"></i> Install Now
+        </a>
+    </div>
+
+    ` : `
+    
+    <div class="home-view">
+        <div class="search-header">
+            <div style="font-weight:800; font-size:20px; color:var(--primary);">MistaHub</div>
+            <i class="fas fa-search" style="color:var(--text-light);"></i>
+        </div>
+        <div class="home-grid" id="homeGrid">
+            <div style="grid-column: span 2; text-align:center; padding:50px; color:#aaa;">
+                <i class="fas fa-spinner fa-spin"></i> Loading Apps...
+            </div>
         </div>
     </div>
 
     <script>
-        const DB_URL_CLIENT = "${DB_URL}"; 
-        let allApps = {};
-
-        window.onload = async () => {
-            const params = new URLSearchParams(window.location.search);
-            if(params.get('product')) loadProduct(params.get('product'));
-            else loadCatalog();
-        };
-
-        // --- CATALOG ---
-        async function loadCatalog() {
-            // Check if we are stuck in landing mode, remove it to show header
-            document.body.classList.remove('landing-mode');
-            
-            document.getElementById('view-home').style.display = 'block';
-            document.getElementById('view-product').style.display = 'none';
-            try {
-                const res = await fetch(DB_URL_CLIENT + '/apps.json');
-                const apps = await res.json();
-                const grid = document.getElementById('product-grid');
-                grid.innerHTML = "";
+        // Client Side Logic for Home Page List
+        if(!document.body.classList.contains('landing-mode')) {
+            fetch('${DB_URL}/apps.json')
+            .then(r => r.json())
+            .then(apps => {
+                const grid = document.getElementById('homeGrid');
+                grid.innerHTML = '';
                 if(apps) {
-                    allApps = apps;
-                    renderGrid(allApps);
-                } else {
-                    grid.innerHTML = "";
-                    document.getElementById('no-results').style.display = 'block';
+                    Object.keys(apps).forEach(key => {
+                        grid.innerHTML += \`
+                        <a href="?product=\${key}" class="home-card">
+                            <img src="\${apps[key].icon}" loading="lazy">
+                            <div style="font-weight:700; margin-top:10px;">\${apps[key].name}</div>
+                        </a>\`;
+                    });
                 }
-            } catch(e) { console.error(e); }
-        }
-
-        function renderGrid(apps) {
-            const grid = document.getElementById('product-grid');
-            grid.innerHTML = "";
-            Object.keys(apps).forEach(key => {
-                const data = apps[key];
-                grid.innerHTML += \`
-                <a href="?product=\${key}" class="card">
-                    <img src="\${data.icon}" class="card-icon" loading="lazy">
-                    <div class="card-title">\${data.name}</div>
-                </a>\`;
             });
         }
-
-        window.filterApps = () => {
-            const query = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = {};
-            Object.keys(allApps).forEach(key => {
-                if(allApps[key].name.toLowerCase().includes(query)) filtered[key] = allApps[key];
-            });
-            renderGrid(filtered);
-        };
-
-        // --- PRODUCT PAGE ---
-        async function loadProduct(id) {
-            document.getElementById('view-home').style.display = 'none';
-            document.getElementById('view-product').style.display = 'block';
-            window.scrollTo(0,0);
-            
-            try {
-                const [appRes, setRes] = await Promise.all([
-                    fetch(DB_URL_CLIENT + '/apps/' + id + '.json'),
-                    fetch(DB_URL_CLIENT + '/settings.json')
-                ]);
-                const data = await appRes.json();
-                const settings = await setRes.json();
-
-                if(data) {
-                    document.getElementById('p-title').innerText = data.name;
-                    document.getElementById('p-icon').src = data.icon;
-                    document.getElementById('p-desc').innerHTML = parseDescription(data.fullDesc);
-
-                    const scroller = document.getElementById('p-screens');
-                    scroller.innerHTML = "";
-                    if(data.screenshots) {
-                        data.screenshots.forEach(src => scroller.innerHTML += \`<img src="\${src}" class="screen">\`);
-                    }
-                    
-                    const demoBtn = document.getElementById('btn-demo');
-                    if(data.demoUrl) demoBtn.onclick = () => window.open(data.demoUrl, '_blank');
-                    else demoBtn.style.display = 'none';
-
-                    document.getElementById('btn-install').onclick = () => window.location.href = settings.apkUrl || "#";
-                }
-            } catch(e) { console.error(e); }
-        }
-
-        function parseDescription(text) {
-            if (!text) return "";
-            return text.replace(/\\n/g, "<br>")
-                       .replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>')
-                       .replace(/\`(.*?)\`/g, (match, url) => {
-                           if(url.match(/\\.(jpeg|jpg|gif|png|webp)$/i)) return \`<img src="\${url}" style="max-width:100%">\`;
-                           return \`<a href="\${url}" target="_blank">Link <i class="fas fa-external-link-alt"></i></a>\`;
-                       });
-        }
-
-        window.goHome = () => {
-            window.history.pushState({}, '', '/');
-            loadCatalog();
-        };
     </script>
+    `}
+
 </body>
 </html>
     `;
