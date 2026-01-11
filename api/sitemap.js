@@ -1,16 +1,19 @@
 const axios = require("axios");
 
-export default async function handler(req, res) {
-  // 1. Vercel se Config nikalo
+// 👇 FIX: "export default" hata diya, "module.exports" lagaya
+module.exports = async (req, res) => {
+  
+  // 1. Vercel Environment se Config nikalo
   const configStr = process.env.FIREBASE_CONFIG_JSON;
-  if (!configStr) return res.status(500).send("Env Config Missing");
+  
+  if (!configStr) {
+    // Agar config nahi mili to error mat do, bas empty XML bhej do (Crash rokne ke liye)
+    console.error("Firebase Config Missing!");
+    return res.status(500).send("Error: Env Config Missing");
+  }
 
   const config = JSON.parse(configStr);
-  
-  // 2. Database URL banao
   const FIREBASE_DB_URL = `${config.databaseURL}/apps.json`;
-  
-  // 3. Website ka URL (mistahub.vercel.app)
   const WEBSITE_URL = `https://${req.headers.host}`;
 
   try {
@@ -25,7 +28,6 @@ export default async function handler(req, res) {
     // Product Pages
     if (apps) {
       Object.keys(apps).forEach((key) => {
-        // XML me '&' allowed nahi hota, usko fix kiya
         const safeKey = key.replace(/&/g, '&amp;');
         xml += `<url><loc>${WEBSITE_URL}/?product=${safeKey}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`;
       });
@@ -36,6 +38,7 @@ export default async function handler(req, res) {
     res.status(200).send(xml);
 
   } catch (error) {
+    console.error(error);
     res.status(500).send("Error: " + error.message);
   }
-}
+};
