@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
 
     // 2. FETCH DATA (Server Side)
     let meta = {
-        title: "MistaHub Store",
+        title: "MistaHub",
         desc: "Download premium developer tools and apps.",
         image: "https://i.ibb.co/5WqqrrqB/b491fe4e44b7.png",
         url: "https://mistahub.vercel.app/"
