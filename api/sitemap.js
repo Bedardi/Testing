@@ -1,48 +1,43 @@
 const axios = require("axios");
 
 module.exports = async (req, res) => {
-  const configStr = process.env.FIREBASE_CONFIG_JSON;
-  if (!configStr) {
-    return res.status(500).send("Config Missing");
+  let DB_URL = "";
+  try {
+      if (!process.env.FIREBASE_CONFIG_JSON) throw new Error("Missing Config");
+      const config = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
+      DB_URL = config.databaseURL;
+  } catch (e) {
+      return res.status(500).send("Config Error");
   }
 
-  const config = JSON.parse(configStr);
-  const DB_URL = `${config.databaseURL}/apps.json`;
-  const SITE = "https://mistahub.vercel.app";
-
   try {
-    const response = await axios.get(DB_URL);
+    const response = await axios.get(`${DB_URL}/apps.json`);
     const apps = response.data;
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>`;
-    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`;
-
-    // Home
-    xml += `
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
-        <loc>${SITE}/</loc>
+        <loc>https://mistahub.vercel.app/</loc>
         <changefreq>daily</changefreq>
         <priority>1.0</priority>
-      </url>
-    `;
+      </url>`;
 
-    // App Pages
     if (apps) {
       Object.keys(apps).forEach((key) => {
-        const slug = encodeURIComponent(key);
+        // Simple encoding for URL safety
         xml += `
           <url>
-            <loc>${SITE}/app/${slug}</loc>
+            <loc>https://mistahub.vercel.app/app/${key}</loc>
             <changefreq>weekly</changefreq>
             <priority>0.8</priority>
-          </url>
-        `;
+          </url>`;
       });
     }
 
     xml += `</urlset>`;
 
-    res.setHeader("Content-Type", "text/xml");
+    // ✅ FIX: Correct Content-Type for Google
+    res.setHeader("Content-Type", "application/xml");
     res.status(200).send(xml);
 
   } catch (e) {
