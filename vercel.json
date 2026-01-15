@@ -1,7 +1,9 @@
 {
   "rewrites": [
+    { "source": "/google8a5127f67a587120.html", "destination": "/google8a5127f67a587120.html" },
+    { "source": "/robots.txt", "destination": "/api/robots" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
-    { "source": "/app/:slug", "destination": "/api/index?product=:slug" },
+    { "source": "/app/:product", "destination": "/api/index?product=:product" },
     { "source": "/", "destination": "/api/index" }
   ]
 }
