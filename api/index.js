@@ -3,7 +3,7 @@ const axios = require("axios");
 module.exports = async (req, res) => {
     const { product } = req.query;
 
-    // 🔒 1. SECURE CONFIG
+    // 🔒 1. CONFIG CHECK
     let DB_URL = "";
     try {
         if (!process.env.FIREBASE_CONFIG_JSON) throw new Error("Missing Config");
@@ -43,7 +43,6 @@ module.exports = async (req, res) => {
                 meta.image = appData.seoImage || appData.icon || meta.image;
                 meta.url   = `https://mistahub.vercel.app/app/${product}`;
                 
-                // SCHEMA
                 schemaJson = JSON.stringify({
                     "@context": "https://schema.org",
                     "@type": "SoftwareApplication",
@@ -51,23 +50,36 @@ module.exports = async (req, res) => {
                     "operatingSystem": "ANDROID",
                     "applicationCategory": "UtilitiesApplication",
                     "aggregateRating": { "@type": "AggregateRating", "ratingValue": appData.rating || "4.8", "ratingCount": "1500" },
-                    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
                     "image": appData.icon
                 });
             }
         } catch (error) { console.error("Fetch Error"); }
     }
 
+    // 🔥 FIX 1: Description Formatter Function
+    // Ye function ab HTML generation ke waqt call hoga
+    const formatDescription = (text) => {
+        if (!text) return "";
+        return text
+            .replace(/\n/g, "<br>") // New Line
+            .replace(/\*\*(.*?)\*\*/g, '<b style="color:var(--text); font-weight:800;">$1</b>') // **Bold**
+            .replace(/`(.*?)`/g, '<img src="$1" style="width:100%; border-radius:12px; margin:15px 0; box-shadow:0 5px 15px rgba(0,0,0,0.1);">') // `Image`
+            .replace(/\[(https?:\/\/[^\]]+)\]/g, '<a href="$1" target="_blank" style="display:inline-block; margin:5px 0; color:#2563eb; font-weight:700; text-decoration:underline;">Click to Open Link <i class="fas fa-external-link-alt" style="font-size:12px;"></i></a>'); // [Link]
+    };
+
     const demoButtonHTML = (appData && appData.demoUrl) 
         ? `<a href="${appData.demoUrl}" target="_blank" class="btn btn-demo"><i class="fas fa-eye"></i> Demo</a>` 
         : ``;
 
-    // 🔗 DEEP LINK INTENT (Open With MistaHub App)
-    // Ye line magic karegi: Agar app installed hai to kholegi, nahi to PlayStore/Website pe rahegi.
+    // 🔥 FIX 2: Stronger Open App Intent
+    // Ye format direct package manager ko hit karega
     const packageID = "com.mista.mistahub";
-    const intentLink = `intent://${meta.url.replace("https://", "")}#Intent;scheme=https;package=${packageID};S.browser_fallback_url=${meta.url};end`;
+    const openAppUrl = `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10000000;component=${packageID}/.MainActivity;package=${packageID};end`;
+    
+    // Fallback: Agar upar wala na chale to simple package intent
+    const simpleIntent = `intent:#Intent;package=${packageID};end`;
 
-    // 3. HTML & CSS
+    // 3. HTML GENERATION
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -96,7 +108,7 @@ module.exports = async (req, res) => {
         body { margin: 0; font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); padding-bottom: 100px; }
         a { text-decoration: none; color: inherit; }
 
-        /* --- 1. HERO & HEADER (BRAND STYLE) --- */
+        /* BRAND HEADER */
         .brand-header {
             background: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%);
             color: white; padding: 20px; border-radius: 0 0 35px 35px;
@@ -109,7 +121,7 @@ module.exports = async (req, res) => {
             background-size: 20px 20px; opacity: 0.6; pointer-events: none;
         }
 
-        /* --- 2. HOME PAGE CARDS (APP STORE STYLE) --- */
+        /* HOME STYLE */
         .search-wrapper { margin: -25px 20px 20px; position: relative; z-index: 10; }
         .search-box { 
             background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
@@ -120,29 +132,21 @@ module.exports = async (req, res) => {
 
         .home-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 0 20px; max-width: 800px; margin: 0 auto; }
         
-        /* 🔥 UPGRADED CARD DESIGN */
         .app-card {
             background: var(--surface); padding: 15px; border-radius: 22px;
             display: flex; flex-direction: column; align-items: center; text-align: center;
             box-shadow: 0 5px 15px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;
-            transition: transform 0.2s, box-shadow 0.2s; position: relative; overflow: hidden;
+            transition: transform 0.2s; position: relative; overflow: hidden;
         }
         .app-card:active { transform: scale(0.96); }
-        .app-card img { width: 70px; height: 70px; border-radius: 18px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); margin-bottom: 12px; }
+        .app-card img { width: 70px; height: 70px; border-radius: 18px; margin-bottom: 12px; }
         .app-card .title { font-weight: 700; font-size: 15px; line-height: 1.3; margin-bottom: 4px; color: #1e293b; }
-        .app-card .sub { font-size: 12px; color: #94a3b8; font-weight: 500; }
-        
-        .get-btn-mini {
-            margin-top: 10px; background: #f1f5f9; color: var(--primary);
-            font-size: 12px; font-weight: 800; padding: 6px 16px; border-radius: 20px;
-            text-transform: uppercase; letter-spacing: 0.5px;
-        }
+        .get-btn-mini { margin-top: 10px; background: #f1f5f9; color: var(--primary); font-size: 12px; font-weight: 800; padding: 6px 16px; border-radius: 20px; }
 
-        /* --- 3. PRODUCT PAGE HERO --- */
+        /* PRODUCT HERO */
         .prod-hero { padding: 40px 20px; text-align: center; position: relative; z-index: 2; }
         .prod-icon { width: 110px; height: 110px; border-radius: 26px; box-shadow: 0 20px 50px rgba(0,0,0,0.25); border: 4px solid rgba(255,255,255,0.2); margin-bottom: 15px; }
         
-        /* SHARE BUTTON (Floating Top Right) */
         .top-actions { position: absolute; top: 20px; right: 20px; z-index: 10; }
         .action-btn { 
             background: rgba(255,255,255,0.2); width: 40px; height: 40px; border-radius: 50%; 
@@ -150,7 +154,6 @@ module.exports = async (req, res) => {
             backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3); cursor: pointer;
         }
 
-        /* OPEN IN APP BANNER */
         .open-app-banner {
             display: flex; align-items: center; justify-content: space-between;
             background: #eff6ff; padding: 10px 15px; border-radius: 12px;
@@ -158,31 +161,22 @@ module.exports = async (req, res) => {
             animation: fadeIn 0.5s ease-in-out;
         }
 
-        /* --- 4. DETAILS & PREVIEW --- */
         .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
-        
         .scroller-wrapper { margin: 0 -20px; padding: 0 20px; }
         .scroller { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 20px; scrollbar-width: none; }
         .scroller::-webkit-scrollbar { display: none; }
         .screen { height: 360px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
 
         .desc-box { background: white; padding: 25px; border-radius: 24px; line-height: 1.7; color: #334155; font-size: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.02); }
-        .desc-box b { color: var(--text); }
-        .desc-box img { max-width: 100%; border-radius: 12px; margin: 10px 0; }
 
-        /* --- 5. FLOATING BOTTOM BAR (GLASS) --- */
         .glass-footer {
             position: fixed; bottom: 20px; left: 20px; right: 20px; z-index: 100;
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px);
             padding: 10px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.5);
             display: flex; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             max-width: 600px; margin: 0 auto;
         }
-        .btn { 
-            flex: 1; height: 50px; border-radius: 18px; border: none; 
-            font-weight: 700; font-size: 15px; cursor: pointer; display: flex; 
-            align-items: center; justify-content: center; gap: 8px;
-        }
+        .btn { flex: 1; height: 50px; border-radius: 18px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .btn-install { background: #111; color: white; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         .btn-demo { background: transparent; color: var(--primary); border: 1px solid #e0e7ff; }
 
@@ -195,7 +189,6 @@ module.exports = async (req, res) => {
     ${product ? `
     <div class="brand-header prod-hero">
         <div class="header-bg-pattern"></div>
-        
         <a href="/" style="position:absolute; top:20px; left:20px; background:rgba(0,0,0,0.2); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
             <i class="fas fa-arrow-left"></i>
         </a>
@@ -209,21 +202,16 @@ module.exports = async (req, res) => {
         <img src="${appData.icon}" class="prod-icon">
         <h1 style="margin:0; font-size:26px; font-weight:800;">${appData.name}</h1>
         <p style="margin:5px 0 0; opacity:0.9; font-size:14px;">MistaHub Verified • Official</p>
-        
-        <div style="display:flex; gap:10px; justify-content:center; margin-top:15px;">
-            <div style="background:rgba(255,255,255,0.2); padding:5px 15px; border-radius:20px; font-size:12px; font-weight:600;"><i class="fas fa-shield-alt"></i> 100% Safe</div>
-            <div style="background:rgba(255,255,255,0.2); padding:5px 15px; border-radius:20px; font-size:12px; font-weight:600;"><i class="fas fa-star"></i> ${appData.rating || '4.8'}</div>
-        </div>
     </div>
 
     <div class="container" style="margin-top:20px;">
         
-        <a href="${intentLink}" class="open-app-banner">
+        <a href="${simpleIntent}" class="open-app-banner">
             <div style="display:flex; align-items:center; gap:10px;">
                 <img src="https://i.ibb.co/5WqqrrqB/b491fe4e44b7.png" style="width:30px; border-radius:8px;">
                 <div style="font-size:13px; font-weight:700; color:#1e293b;">
                     Open in MistaHub App
-                    <div style="font-size:11px; font-weight:400; color:#64748b;">Better experience, Faster download</div>
+                    <div style="font-size:11px; font-weight:400; color:#64748b;">Fast & Better Experience</div>
                 </div>
             </div>
             <div style="background:#2563eb; color:white; padding:5px 12px; border-radius:15px; font-size:11px; font-weight:700;">OPEN</div>
@@ -238,7 +226,7 @@ module.exports = async (req, res) => {
 
         <h3 style="margin:25px 0 15px; font-size:18px;">About this app</h3>
         <div class="desc-box">
-            ${(appData.fullDesc || "").replace(/\n/g, "<br>").replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\[(.*?)\]/g, '<a href="$1" style="color:blue;text-decoration:underline;">Link</a>')}
+            ${formatDescription(appData.fullDesc)}
         </div>
         
         <div style="height: 100px;"></div>
@@ -278,7 +266,7 @@ module.exports = async (req, res) => {
         <div class="search-wrapper">
             <div class="search-box">
                 <i class="fas fa-search" style="color:#94a3b8;"></i>
-                <input type="text" id="searchInput" placeholder="Games, Tools, Source Codes...">
+                <input type="text" id="searchInput" placeholder="Search apps...">
             </div>
         </div>
 
